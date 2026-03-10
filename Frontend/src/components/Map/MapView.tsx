@@ -22,54 +22,55 @@ interface WeatherCellData {
   humidity: number; cloud_cover: number; visibility: number; condition: string;
 }
 
-// Temperature color: cold=blue → mild=yellow → hot=red (like Zoom Earth)
-function tempColor(t: number): string {
-  if (t < 0)  return `rgba(30,80,200,0.75)`;
-  if (t < 10) return `rgba(80,160,220,0.75)`;
-  if (t < 20) return `rgba(160,220,160,0.75)`;
-  if (t < 25) return `rgba(255,240,80,0.75)`;
-  if (t < 30) return `rgba(255,180,40,0.75)`;
-  if (t < 35) return `rgba(255,100,20,0.78)`;
-  return `rgba(220,30,20,0.80)`;
+
+
+function getAirlineColors(callsign: string | undefined | null): { body: string; stroke: string } {
+  if (!callsign) return { body: "#111111", stroke: "#ffffff" };
+  const cs = callsign.toUpperCase();
+
+  // IndiGo - Blue / Light Blue
+  if (cs.startsWith("IGO") || cs.startsWith("IFLY") || cs.startsWith("6E")) return { body: "#001B94", stroke: "#00E0FF" };
+  // Air India - Red / Orange
+  if (cs.startsWith("AIC") || cs.startsWith("AI")) return { body: "#ED1C24", stroke: "#F7941D" };
+  // SpiceJet - Red / Yellow
+  if (cs.startsWith("SEJ") || cs.startsWith("SG")) return { body: "#EB1C24", stroke: "#FCEE21" };
+  // Vistara - Purple / Gold
+  if (cs.startsWith("VTI") || cs.startsWith("UK")) return { body: "#3E103F", stroke: "#8C6A3E" };
+  // Akasa Air - Orange/Purple
+  if (cs.startsWith("AKJ") || cs.startsWith("QP")) return { body: "#FF6B00", stroke: "#7A00B7" };
+  // Air Asia India / Air India Express
+  if (cs.startsWith("IAD") || cs.startsWith("AXB") || cs.startsWith("IX")) return { body: "#FF0000", stroke: "#FFFFFF" };
+  // Alliance Air
+  if (cs.startsWith("LLR") || cs.startsWith("9I")) return { body: "#00AEEF", stroke: "#003A70" };
+  // Emirates
+  if (cs.startsWith("UAE") || cs.startsWith("EK")) return { body: "#FF0000", stroke: "#D4AF37" };
+  // Qatar Airways
+  if (cs.startsWith("QTR") || cs.startsWith("QR")) return { body: "#5C0632", stroke: "#B38B5D" };
+
+  return { body: "#111111", stroke: "#ffffff" };
 }
 
-// Humidity: dry=sand → wet=deep teal
-function humidColor(h: number): string {
-  if (h < 20) return `rgba(210,170,80,0.72)`;
-  if (h < 40) return `rgba(180,200,100,0.72)`;
-  if (h < 60) return `rgba(80,180,140,0.72)`;
-  if (h < 80) return `rgba(30,130,160,0.75)`;
-  return `rgba(10,80,140,0.78)`;
-}
-
-// Precipitation: none=transparent → heavy=purple
-function rainColor(condition: string): string {
-  const c = condition.toLowerCase();
-  if (c.includes("thunderstorm") || c.includes("storm")) return `rgba(100,0,160,0.85)`;
-  if (c.includes("heavy rain") || c.includes("heavy shower")) return `rgba(0,80,200,0.80)`;
-  if (c.includes("rain") || c.includes("drizzle") || c.includes("shower")) return `rgba(0,160,255,0.70)`;
-  if (c.includes("overcast") || c.includes("cloud")) return `rgba(100,130,180,0.45)`;
-  return `rgba(0,0,0,0)`;
-}
-
-// Cloud: clear=transparent → overcast=blue-grey
-function cloudColor(cover: number): string {
-  if (cover < 10) return `rgba(0,0,0,0)`;
-  if (cover < 30) return `rgba(180,200,230,0.30)`;
-  if (cover < 60) return `rgba(120,150,200,0.50)`;
-  if (cover < 85) return `rgba(80,110,170,0.65)`;
-  return `rgba(50,70,140,0.78)`;
-}
-
-function makeIcon(heading: number, conflict: boolean, selected: boolean): L.DivIcon {
+function makeIcon(ac: Aircraft, conflict: boolean, selected: boolean): L.DivIcon {
   const size = selected ? 26 : 20;
-  const body = conflict ? "#dd1111" : selected ? "#0099cc" : "#111111";
-  const stroke = conflict ? "#ff6666" : selected ? "#00d4ff" : "#ffffff";
+
+  let body = "#111111";
+  let stroke = "#ffffff";
+
+  if (conflict) {
+    body = "#dd1111"; stroke = "#ff6666";
+  } else if (selected) {
+    body = "#0099cc"; stroke = "#00d4ff";
+  } else {
+    const colors = getAirlineColors(ac.callsign);
+    body = colors.body; stroke = colors.stroke;
+  }
+
   const sw = conflict ? 1.2 : 0.8;
+  const heading = ac.heading;
   const shadow = conflict
     ? "filter:drop-shadow(0 0 6px #ff3333) drop-shadow(0 0 14px #ff000077);"
     : selected ? "filter:drop-shadow(0 0 5px #00d4ff99);"
-    : "filter:drop-shadow(1px 1px 3px rgba(0,0,0,0.7));";
+      : "filter:drop-shadow(1px 1px 3px rgba(0,0,0,0.7));";
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 40 40"
     style="transform:rotate(${heading}deg);${shadow}display:block;">
@@ -101,23 +102,26 @@ function makeTooltip(ac: Aircraft, conflict: boolean): string {
 interface Particle { x: number; y: number; vx: number; vy: number; age: number; maxAge: number; }
 
 export function MapView() {
-  const containerRef     = useRef<HTMLDivElement>(null);
-  const mapRef           = useRef<L.Map | null>(null);
-  const markersRef       = useRef<Map<string, L.Marker>>(new Map());
-  const prevPositions    = useRef<Map<string, [number, number]>>(new Map());
-  const animFrameRef     = useRef<Map<string, number>>(new Map());
-  const wxCanvasRef      = useRef<HTMLCanvasElement | null>(null);
-  const windCanvasRef    = useRef<HTMLCanvasElement | null>(null);
-  const windAnimRef      = useRef<number>(0);
-  const particlesRef     = useRef<Particle[]>([]);
-  const weatherDataRef   = useRef<WeatherCellData[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
+  const prevPositions = useRef<Map<string, [number, number]>>(new Map());
+  const animFrameRef = useRef<Map<string, number>>(new Map());
+  const wxTileLayerRef = useRef<L.TileLayer | L.TileLayer[] | null>(null);
+  const rainAnimTimerRef = useRef<number>(0);
+  const windCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const windAnimRef = useRef<number>(0);
+  const particlesRef = useRef<Particle[]>([]);
+  const weatherDataRef = useRef<WeatherCellData[]>([]);
 
-  const aircraft         = useStore((s) => s.aircraft);
-  const conflictIcaos    = useStore((s) => s.conflictIcaos);
-  const selectedIcao     = useStore((s) => s.selectedIcao);
-  const setSelectedIcao  = useStore((s) => s.setSelectedIcao);
-  const activeWeather    = useStore((s) => s.activeWeatherMode);
-  const weatherCells     = useStore((s) => s.weatherCells);
+  const aircraft = useStore((s) => s.aircraft);
+  const conflictIcaos = useStore((s) => s.conflictIcaos);
+  const selectedIcao = useStore((s) => s.selectedIcao);
+  const setSelectedIcao = useStore((s) => s.setSelectedIcao);
+  const activeWeather = useStore((s) => s.activeWeatherMode);
+  const weatherCells = useStore((s) => s.weatherCells);
+  const theme = useStore((s) => s.theme);
+  const baseLayerRef = useRef<L.TileLayer | null>(null);
 
   // ── Init map ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -134,29 +138,19 @@ export function MapView() {
     map.createPane("aircraftPane");
     map.getPane("aircraftPane")!.style.zIndex = "700";
 
-    // CartoDB Voyager — English labels
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd", maxZoom: 19,
-    }).addTo(map);
-
     L.control.zoom({ position: "bottomright" }).addTo(map);
     L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
 
     // ── Weather canvas overlays ────────────────────────────────────────────
-    const wxCanvas = document.createElement("canvas");
-    wxCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:300;opacity:0;transition:opacity 0.4s ease";
-    containerRef.current!.appendChild(wxCanvas);
-    wxCanvasRef.current = wxCanvas;
-
     const windCanvas = document.createElement("canvas");
-    windCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:301;opacity:0;transition:opacity 0.4s ease";
+    windCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:431;opacity:0;transition:opacity 0.4s ease";
     containerRef.current!.appendChild(windCanvas);
     windCanvasRef.current = windCanvas;
 
     // Resize canvases on map move/zoom
     const resizeCanvases = () => {
       const size = map.getSize();
-      [wxCanvas, windCanvas].forEach(c => { c.width = size.x; c.height = size.y; });
+      windCanvas.width = size.x; windCanvas.height = size.y;
     };
     map.on("moveend zoomend resize", resizeCanvases);
     resizeCanvases();
@@ -184,10 +178,10 @@ export function MapView() {
         popup.setContent(`
           <div class="wx-popup-content">
             <div class="wx-popup-title">📍 ${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E</div>
-            <div class="wx-popup-row"><span>🌡 Temperature</span><b>${nearestCell.temperature?.toFixed(1) ?? "—"}°C</b></div>
-            <div class="wx-popup-row"><span>💨 Wind</span><b>${nearestCell.wind_speed?.toFixed(1) ?? "—"} m/s · ${Math.round(nearestCell.wind_direction ?? 0)}°</b></div>
-            <div class="wx-popup-row"><span>💧 Humidity</span><b>${Math.round(nearestCell.humidity ?? 0)}%</b></div>
-            <div class="wx-popup-row"><span>☁ Cloud Cover</span><b>${Math.round(nearestCell.cloud_cover ?? 0)}%</b></div>
+            <div class="wx-popup-row"><span>🌡 Temp</span><b>${nearestCell.temperature.toFixed(1)}°C</b></div>
+            <div class="wx-popup-row"><span>💨 Wind</span><b>${(nearestCell.wind_speed * 3.6).toFixed(1)} km/h</b></div>
+            <div class="wx-popup-row"><span>💧 Humid</span><b>${nearestCell.humidity.toFixed(0)}%</b></div>
+            <div class="wx-popup-row"><span>☁ Cover</span><b>${nearestCell.cloud_cover.toFixed(0)}%</b></div>
             <div class="wx-popup-row"><span>👁 Visibility</span><b>${((nearestCell.visibility ?? 0) / 1000).toFixed(1)} km</b></div>
             <div class="wx-popup-row"><span>🌤 Condition</span><b>${nearestCell.condition ?? "—"}</b></div>
           </div>`);
@@ -203,57 +197,99 @@ export function MapView() {
     };
   }, [setSelectedIcao]);
 
+  // ── Handle Theme Base Map Changes ──────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (baseLayerRef.current) map.removeLayer(baseLayerRef.current);
+
+    // Default map styles for light vs dark
+    const isNight = theme === "night";
+    const url = isNight
+      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+
+    baseLayerRef.current = L.tileLayer(url, {
+      subdomains: "abcd", maxZoom: 19,
+    }).addTo(map);
+  }, [theme]);
+
   // ── Sync weatherDataRef ───────────────────────────────────────────────────
   useEffect(() => {
     weatherDataRef.current = weatherCells.map(c => c.data);
   }, [weatherCells]);
 
-  // ── Draw weather canvas overlay ───────────────────────────────────────────
-  const drawWeatherCanvas = useCallback(() => {
-    const map = mapRef.current;
-    const canvas = wxCanvasRef.current;
-    if (!map || !canvas) return;
+  // ── Tile-based Weather Layers ─────────────────────────────────────────────
+  const OWM_API_KEY = "45328962c2facdd9624dcc3499023068"; // OpenWeatherMap free API for demonstration
 
-    const cells = weatherDataRef.current;
-    if (!cells.length || activeWeather === "none" || activeWeather === "wind") {
-      canvas.style.opacity = "0"; return;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Cleanup previous tile layers
+    if (wxTileLayerRef.current) {
+      if (Array.isArray(wxTileLayerRef.current)) {
+        wxTileLayerRef.current.forEach(l => map.removeLayer(l));
+      } else {
+        map.removeLayer(wxTileLayerRef.current);
+      }
+      wxTileLayerRef.current = null;
+    }
+    clearTimeout(rainAnimTimerRef.current);
+
+    const pane = map.getPane("weatherPane");
+    if (pane) {
+      if (activeWeather === "temperature" || activeWeather === "humidity") {
+        pane.style.mixBlendMode = "multiply";
+        pane.style.filter = "none";
+      } else {
+        pane.style.mixBlendMode = "normal";
+        pane.style.filter = "none";
+      }
     }
 
-    const size = map.getSize();
-    canvas.width = size.x; canvas.height = size.y;
-    const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (activeWeather === "temperature") {
+      wxTileLayerRef.current = L.tileLayer(`https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`, {
+        pane: "weatherPane", opacity: 1, keepBuffer: 2, className: "weather-tile-heavy"
+      }).addTo(map);
+    } else if (activeWeather === "clouds") {
+      wxTileLayerRef.current = L.tileLayer(`https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`, {
+        pane: "weatherPane", opacity: 0.9, keepBuffer: 2, className: "weather-tile-clouds"
+      }).addTo(map);
+    } else if (activeWeather === "humidity") {
+      wxTileLayerRef.current = L.tileLayer(`https://tile.openweathermap.org/map/humidity_new/{z}/{x}/{y}.png?appid=${OWM_API_KEY}`, {
+        pane: "weatherPane", opacity: 1, keepBuffer: 2, className: "weather-tile-heavy"
+      }).addTo(map);
+    } else if (activeWeather === "precipitation") {
+      fetch("https://api.rainviewer.com/public/weather-maps.json")
+        .then(r => r.json())
+        .then(data => {
+          if (useStore.getState().activeWeatherMode !== "precipitation" || !mapRef.current) return;
+          const pastCoords = data.radar.past;
+          const layers = pastCoords.map((frame: any) =>
+            L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${frame.time}/256/{z}/{x}/{y}/2/1_1.png`, {
+              pane: "weatherPane", opacity: 0, zIndex: 430
+            }).addTo(mapRef.current!)
+          );
+          wxTileLayerRef.current = layers;
 
-    // Draw each weather cell as a large blurred circle
-    cells.forEach(cell => {
-      const pt = map.latLngToContainerPoint([cell.latitude, cell.longitude]);
-      const zoom = map.getZoom();
-      const radius = Math.max(60, 180 / Math.pow(2, zoom - 5));
-
-      let color: string;
-      switch (activeWeather) {
-        case "temperature":   color = tempColor(cell.temperature); break;
-        case "humidity":      color = humidColor(cell.humidity); break;
-        case "precipitation": color = rainColor(cell.condition); break;
-        case "clouds":        color = cloudColor(cell.cloud_cover); break;
-        default: return;
-      }
-      if (color === "rgba(0,0,0,0)") return;
-
-      const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius);
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-    });
-
-    canvas.style.opacity = "1";
+          let currentFrame = 0;
+          const animateRadar = () => {
+            if (!mapRef.current || useStore.getState().activeWeatherMode !== "precipitation") return;
+            layers.forEach((l: L.TileLayer, i: number) => {
+              l.setOpacity(i === currentFrame ? 0.75 : 0);
+            });
+            currentFrame = (currentFrame + 1) % pastCoords.length;
+            rainAnimTimerRef.current = setTimeout(animateRadar, 1500) as unknown as number;
+          };
+          animateRadar();
+        });
+    }
   }, [activeWeather]);
 
   // ── Wind particle animation ───────────────────────────────────────────────
-  const animateWind = useCallback(() => {
+  const animateWeather = useCallback(() => {
     const map = mapRef.current;
     const canvas = windCanvasRef.current;
     if (!map || !canvas || activeWeather !== "wind") {
@@ -263,17 +299,30 @@ export function MapView() {
     }
 
     const cells = weatherDataRef.current;
-    const size = map.getSize();
-    canvas.width = size.x; canvas.height = size.y;
+    if (!cells || cells.length === 0) {
+      windAnimRef.current = requestAnimationFrame(animateWeather);
+      return;
+    }
+
     canvas.style.opacity = "1";
     const ctx = canvas.getContext("2d")!;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const maxParticles = 3000;
+
+    // Trail effect
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.12)";
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = "source-over";
 
     // Spawn new particles
-    if (particlesRef.current.length < 300) {
-      for (let i = 0; i < 5; i++) {
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height;
-        // Find nearest cell for wind at this position
+    if (particlesRef.current.length < maxParticles) {
+      for (let i = 0; i < maxParticles / 20; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+
         const latlng = map.containerPointToLatLng([x, y]);
         let best = cells[0];
         let minD = Infinity;
@@ -281,67 +330,54 @@ export function MapView() {
           const d = Math.hypot(c.latitude - latlng.lat, c.longitude - latlng.lng);
           if (d < minD) { minD = d; best = c; }
         });
+
         if (!best) continue;
-        const spd = (best.wind_speed / 20) * 2.5;
+
+        // Use wind vector data (u/v components)
+        const speed = best.wind_speed;
         const rad = ((best.wind_direction - 180) * Math.PI) / 180;
-        particlesRef.current.push({
-          x, y,
-          vx: Math.sin(rad) * spd,
-          vy: -Math.cos(rad) * spd,
-          age: 0,
-          maxAge: 60 + Math.random() * 80,
-        });
+        const u = Math.sin(rad) * speed;
+        const v = -Math.cos(rad) * speed;
+
+        const vx = (u / 20) * 3;
+        const vy = (v / 20) * 3;
+        const maxAge = 40 + Math.random() * 60;
+
+        particlesRef.current.push({ x, y, vx, vy, age: 0, maxAge });
       }
     }
 
-    // Blue-purple-green gradient bg for wind (like Zoom Earth)
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const bgGrad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    bgGrad.addColorStop(0, "rgba(10,20,60,0.55)");
-    bgGrad.addColorStop(0.5, "rgba(20,50,100,0.50)");
-    bgGrad.addColorStop(1, "rgba(5,30,70,0.55)");
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    particlesRef.current = particlesRef.current.filter(p => p.age < p.maxAge && p.x >= -50 && p.x <= width + 50 && p.y >= -50 && p.y <= height + 50);
 
-    // Draw particles
-    particlesRef.current = particlesRef.current.filter(p => p.age < p.maxAge);
     particlesRef.current.forEach(p => {
-      const alpha = Math.sin((p.age / p.maxAge) * Math.PI) * 0.85;
+      let alpha = Math.sin((p.age / p.maxAge) * Math.PI) * 0.95;
       const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-      // Color by speed: slow=purple, medium=blue, fast=cyan/green
-      const hue = speed < 1 ? 260 : speed < 2 ? 210 : 160;
+      const hue = speed < 1 ? 260 : speed < 2.5 ? 210 : 160;
+
       ctx.beginPath();
       ctx.moveTo(p.x - p.vx * 4, p.y - p.vy * 4);
       ctx.lineTo(p.x, p.y);
       ctx.strokeStyle = `hsla(${hue},90%,70%,${alpha})`;
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.6;
       ctx.lineCap = "round";
       ctx.stroke();
+
       p.x += p.vx; p.y += p.vy; p.age++;
     });
 
-    windAnimRef.current = requestAnimationFrame(animateWind);
+    windAnimRef.current = requestAnimationFrame(animateWeather);
   }, [activeWeather]);
 
-  // ── Trigger weather rendering when mode/cells change ─────────────────────
+  // ── Trigger wind animation ────────────────────────────────────────────────
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
     cancelAnimationFrame(windAnimRef.current);
     particlesRef.current = [];
-
     if (activeWeather === "wind") {
-      if (wxCanvasRef.current) wxCanvasRef.current.style.opacity = "0";
-      animateWind();
+      animateWeather();
     } else {
       if (windCanvasRef.current) windCanvasRef.current.style.opacity = "0";
-      drawWeatherCanvas();
-      // Redraw on map move
-      map.off("moveend zoomend", drawWeatherCanvas);
-      if (activeWeather !== "none") map.on("moveend zoomend", drawWeatherCanvas);
     }
-  }, [activeWeather, weatherCells, drawWeatherCanvas, animateWind]);
+  }, [activeWeather, animateWeather]);
 
   // ── Smooth aircraft movement ──────────────────────────────────────────────
   useEffect(() => {
@@ -353,7 +389,7 @@ export function MapView() {
       seen.add(ac.icao);
       const isConflict = conflictIcaos.has(ac.icao);
       const isSelected = ac.icao === selectedIcao;
-      const icon = makeIcon(ac.heading, isConflict, isSelected);
+      const icon = makeIcon(ac, isConflict, isSelected);
       const targetLat = ac.latitude, targetLng = ac.longitude;
 
       const existing = markersRef.current.get(ac.icao);
@@ -451,4 +487,15 @@ const LEAFLET_CSS = `
   .leaflet-control-zoom a:last-child  { border-radius:0 0 8px 8px !important; }
   .leaflet-control-zoom a:hover { background:rgba(0,212,255,0.15) !important; }
   .leaflet-control-scale-line { background:rgba(6,10,22,0.82) !important; border:1px solid rgba(0,212,255,0.22) !important; border-top:none !important; color:#5a7a9a !important; font-family:'Orbitron',monospace !important; font-size:8px !important; padding:2px 7px !important; border-radius:0 0 6px 6px !important; }
+  .weather-tile-heavy { 
+    background-color: white !important; 
+    filter: brightness(0.35) saturate(9.0) contrast(3.0) !important;
+    transition: none !important;
+    opacity: 1 !important;
+  }
+  .weather-tile-clouds { 
+    filter: invert(1) hue-rotate(180deg) contrast(1.8) opacity(0.7) !important; 
+    mix-blend-mode: multiply !important; 
+    transition: none !important;
+  }
 `;

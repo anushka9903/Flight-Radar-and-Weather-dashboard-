@@ -3,14 +3,14 @@ import { useStore } from "../../store";
 import type { ConnectionStatus } from "../../types";
 
 export function TopBar() {
-  const aircraft         = useStore((s) => s.aircraft);
-  const conflicts        = useStore((s) => s.conflicts);
+  const aircraft = useStore((s) => s.aircraft);
+  const conflicts = useStore((s) => s.conflicts);
   const connectionStatus = useStore((s) => s.connectionStatus);
-  const lastUpdated      = useStore((s) => s.lastUpdated);
-  const theme            = useStore((s) => s.theme);
-  const setTheme         = useStore((s) => s.setTheme);
-  const setManualTheme   = useStore((s) => s.setManualTheme);
-  const setSelectedIcao  = useStore((s) => s.setSelectedIcao);
+  const lastUpdated = useStore((s) => s.lastUpdated);
+  const theme = useStore((s) => s.theme);
+  const setTheme = useStore((s) => s.setTheme);
+  const setManualTheme = useStore((s) => s.setManualTheme);
+  const setSelectedIcao = useStore((s) => s.setSelectedIcao);
   const [search, setSearch] = useState("");
   const [showResults, setShowResults] = useState(false);
 
@@ -19,9 +19,9 @@ export function TopBar() {
 
   const searchResults = search.length >= 2
     ? aircraft.filter(ac =>
-        (ac.callsign ?? "").toLowerCase().includes(search.toLowerCase()) ||
-        ac.icao.toLowerCase().includes(search.toLowerCase())
-      ).slice(0, 8)
+      (ac.callsign ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      ac.icao.toLowerCase().includes(search.toLowerCase())
+    ).slice(0, 8)
     : [];
 
   const handleTheme = () => { setManualTheme(true); setTheme(theme === "day" ? "night" : "day"); };
@@ -45,10 +45,10 @@ export function TopBar() {
       <div className="topbar-brand">
         <div className="topbar-logo">
           <svg viewBox="0 0 32 32" fill="none" width="28" height="28">
-            <circle cx="16" cy="16" r="15" stroke="var(--accent)" strokeWidth="1.5"/>
-            <path d="M16 4 L20 16 L16 14 L12 16 Z" fill="var(--accent)"/>
-            <circle cx="16" cy="16" r="2.5" fill="var(--accent)"/>
-            <path d="M8 22 L16 18 L24 22" stroke="var(--accent)" strokeWidth="1" strokeOpacity="0.5"/>
+            <circle cx="16" cy="16" r="15" stroke="var(--accent)" strokeWidth="1.5" />
+            <path d="M16 4 L20 16 L16 14 L12 16 Z" fill="var(--accent)" />
+            <circle cx="16" cy="16" r="2.5" fill="var(--accent)" />
+            <path d="M8 22 L16 18 L24 22" stroke="var(--accent)" strokeWidth="1" strokeOpacity="0.5" />
           </svg>
         </div>
         <div className="topbar-title-group">
@@ -77,7 +77,7 @@ export function TopBar() {
               }}>
                 <span className="tsr-cs">{ac.callsign ?? ac.icao}</span>
                 <span className="tsr-meta">
-                  {ac.icao} · {ac.altitude > 100 ? `FL${Math.round(ac.altitude/100).toString().padStart(3,"0")}` : "GND"} · {Math.round(ac.velocity)} kts
+                  {ac.icao} · {ac.altitude > 100 ? `FL${Math.round(ac.altitude / 100).toString().padStart(3, "0")}` : "GND"} · {Math.round(ac.velocity)} kts
                 </span>
               </div>
             ))}
@@ -87,7 +87,7 @@ export function TopBar() {
 
       {/* Stats */}
       <div className="topbar-stats">
-        <Stat label="AIRBORNE"  value={airborne} />
+        <Stat label="AIRBORNE" value={airborne} />
         <div className="stat-sep" />
         <Stat label="ON GROUND" value={onGround} />
         <div className="stat-sep" />
@@ -106,7 +106,7 @@ export function TopBar() {
       <div className="topbar-right">
         {lastUpdated && (
           <span className="topbar-upd">
-            UPD {lastUpdated.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit", second:"2-digit" })} UTC
+            UPD {lastUpdated.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} UTC
           </span>
         )}
         <button className="theme-btn" onClick={handleTheme}>
